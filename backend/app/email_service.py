@@ -1,79 +1,60 @@
 import logging
-import smtplib
-import asyncio
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from functools import partial
-
+import httpx
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-
-def _send_sync_email_smtp(message: MIMEMultipart, settings) -> None:
-    """
-    Synchronous function to send email via SMTP.
-    Must be run in a separate thread to avoid blocking the event loop.
-    """
-    try:
-        # Debugging: Log the host we are trying to reach
-        logger.info(f"Connecting to SMTP: {settings.smtp_host}:{settings.smtp_port} User: {settings.smtp_username}")
-
-        if settings.smtp_port == 465:
-            # Implicit TLS (Port 465)
-            with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=30) as server:
-                server.login(settings.smtp_username, settings.smtp_password)
-                server.send_message(message)
-        else:
-            # STARTTLS (Port 587 or others)
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as server:
-                # server.set_debuglevel(1) # Uncomment to see full SMTP conversation in logs
-                server.starttls()
-                server.login(settings.smtp_username, settings.smtp_password)
-                server.send_message(message)
-        
-        logger.info("SMTP send successful.")
-        
-    except Exception as e:
-        logger.error(f"SMTP connection error: {e}")
-        raise e
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
-async def _send_email_async(message: MIMEMultipart) -> bool:
+async def _send_brevo_email(to_email: str, subject: str, html_content: str, cc_email: str = None) -> bool:
     """
-    Helper to run the sync SMTP call in a thread pool.
+    Send email using Brevo (Sendinblue) Transactional API.
     """
-    if not (settings.smtp_username and settings.smtp_password):
-        logger.warning("SMTP not configured. Skipping email send.")
+    if not settings.brevo_api_key:
+        logger.warning("Brevo API Key not configured. Skipping email send.")
         return True
 
-    loop = asyncio.get_running_loop()
-    try:
-        # Run synchronous SMTP call in a thread to avoid blocking asyncio loop
-        await loop.run_in_executor(
-            None, 
-            partial(_send_sync_email_smtp, message, settings)
-        )
-        return True
-    except Exception as exc:
-        logger.error(f"Failed to send email execution: {exc}")
-        return False
+    headers = {
+        "accept": "application/json",
+        "api-key": settings.brevo_api_key,
+        "content-type": "application/json",
+    }
+
+    payload = {
+        "sender": {"name": settings.app_name, "email": settings.sender_email},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html_content,
+    }
+
+    if cc_email:
+        payload["cc"] = [{"email": cc_email}]
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(BREVO_API_URL, json=payload, headers=headers, timeout=10.0)
+            if response.status_code in (200, 201, 202):
+                logger.info("Email sent successfully via Brevo to %s", to_email)
+                return True
+            else:
+                logger.error(f"Brevo API Error: {response.status_code} - {response.text}")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to connect to Brevo API: {e}")
+            return False
 
 
 async def send_inquiry_email(inquiry: dict) -> bool:
     """
-    Send inquiry details to the sales team.
+    Send inquiry details to the sales team via Brevo.
     """
     try:
-        message = MIMEMultipart("alternative")
         product_name = inquiry.get("product_name") or "General Inquiry"
-        message["Subject"] = f"B2B inquiry for {product_name}"
-        message["From"] = settings.smtp_username or "noreply@precisiontools.com"
-        message["To"] = settings.sales_email
-        if inquiry.get("email"):
-            message["Cc"] = inquiry.get("email")
-
+        subject = f"B2B inquiry for {product_name}"
+        
+        # Construct HTML body
         html_body = f"""
         <html>
           <body>
@@ -87,35 +68,31 @@ async def send_inquiry_email(inquiry: dict) -> bool:
           </body>
         </html>
         """
-        message.attach(MIMEText(html_body, "html"))
 
-        if not (settings.smtp_username and settings.smtp_password):
-            logger.warning("SMTP not configured. Logging inquiry instead.")
+        if not settings.brevo_api_key:
+            logger.warning("Brevo API key missing. Logging inquiry instead.")
             logger.info("Inquiry details: %s", inquiry)
             return True
 
-        result = await _send_email_async(message)
-        if result:
-            logger.info("Inquiry email sent to %s", settings.sales_email)
-        return result
+        return await _send_brevo_email(
+            to_email=settings.sales_email,
+            subject=subject,
+            html_content=html_body,
+            cc_email=inquiry.get("email")
+        )
 
     except Exception as exc:
-        logger.error("Failed to compose/send inquiry email: %s", exc)
+        logger.error("Failed to process inquiry email: %s", exc)
         return False
 
 
 async def send_visit_request_email(visit_request: dict) -> bool:
     """
-    Send visit request details to the sales team.
+    Send visit request details to the sales team via Brevo.
     """
     try:
-        message = MIMEMultipart("alternative")
-        message["Subject"] = "VISIT REQUEST"
-        message["From"] = settings.smtp_username or "noreply@precisiontools.com"
-        message["To"] = settings.sales_email
-        if visit_request.get("email"):
-            message["Cc"] = visit_request.get("email")
-
+        subject = "VISIT REQUEST"
+        
         html_body = f"""
         <html>
           <body>
@@ -130,18 +107,19 @@ async def send_visit_request_email(visit_request: dict) -> bool:
           </body>
         </html>
         """
-        message.attach(MIMEText(html_body, "html"))
 
-        if not (settings.smtp_username and settings.smtp_password):
-            logger.warning("SMTP not configured. Logging visit request instead.")
+        if not settings.brevo_api_key:
+            logger.warning("Brevo API key missing. Logging visit request instead.")
             logger.info("Visit request details: %s", visit_request)
             return True
 
-        result = await _send_email_async(message)
-        if result:
-            logger.info("Visit request email sent to %s", settings.sales_email)
-        return result
+        return await _send_brevo_email(
+            to_email=settings.sales_email,
+            subject=subject,
+            html_content=html_body,
+            cc_email=visit_request.get("email")
+        )
 
     except Exception as exc:
-        logger.error("Failed to compose/send visit request email: %s", exc)
+        logger.error("Failed to process visit request email: %s", exc)
         return False

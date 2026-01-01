@@ -16,10 +16,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
-    smtp_host: str = "smtp.gmail.com"
-    smtp_port: int = 587
-    smtp_username: str = ""
-    smtp_password: str = ""
+    # Email Settings (Brevo API)
+    brevo_api_key: str = Field(default="", description="API Key from Brevo (Sendinblue)")
+    sender_email: str = Field(default="noreply@uttamkitchen.com", description="Verified sender email in Brevo")
     sales_email: str = "sales@uttamkitch.com"
 
     @field_validator("cors_origins", mode="before")
