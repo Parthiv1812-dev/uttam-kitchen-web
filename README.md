@@ -29,4 +29,3 @@ This skeleton now mirrors the `tool-manufacturing-website` layout with a clear s
 
 ## B2B inquiry flow
 The `frontend/src/components/B2BInquiryModal.tsx` posts user details to `${VITE_API_URL}/api/inquiry`. The backend validates fields and sends (or logs) an email. Update `.env` files to point both sides at the same host/port.
-  
