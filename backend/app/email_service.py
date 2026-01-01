@@ -53,7 +53,7 @@ async def send_inquiry_email(inquiry: dict) -> bool:
                 password=settings.smtp_password,
                 use_tls=use_tls,
                 start_tls=start_tls,
-                timeout=10,  # 10s timeout
+                timeout=30,  # 30s timeout
             )
             logger.info("Inquiry email sent to %s", settings.sales_email)
             return True
@@ -110,7 +110,7 @@ async def send_visit_request_email(visit_request: dict) -> bool:
                 password=settings.smtp_password,
                 use_tls=use_tls,
                 start_tls=start_tls,
-                timeout=10,  # 10s timeout
+                timeout=30,  # 30s timeout
             )
             logger.info("Visit request email sent to %s", settings.sales_email)
             return True
