@@ -16,9 +16,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
-    # Email Settings (Brevo API)
-    brevo_api_key: str = Field(default="", description="API Key from Brevo (Sendinblue)")
-    sender_email: str = Field(default="noreply@uttamkitchen.com", description="Verified sender email in Brevo")
+    # Email Settings (SendGrid API)
+    sendgrid_api_key: str = Field(default="", description="API Key from SendGrid")
+    sender_email: str = Field(default="noreply@uttamkitchen.com", description="Verified sender email in SendGrid")
     sales_email: str = "sales@uttamkitch.com"
 
     @field_validator("cors_origins", mode="before")

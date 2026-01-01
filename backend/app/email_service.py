@@ -5,50 +5,53 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+SENDGRID_API_URL = "https://api.sendgrid.com/v3/mail/send"
 
 
-async def _send_brevo_email(to_email: str, subject: str, html_content: str, cc_email: str = None) -> bool:
+async def _send_sendgrid_email(to_email: str, subject: str, html_content: str, cc_email: str = None) -> bool:
     """
-    Send email using Brevo (Sendinblue) Transactional API.
+    Send email using SendGrid V3 API.
     """
-    if not settings.brevo_api_key:
-        logger.warning("Brevo API Key not configured. Skipping email send.")
+    if not settings.sendgrid_api_key:
+        logger.warning("SendGrid API Key not configured. Skipping email send.")
         return True
 
     headers = {
-        "accept": "application/json",
-        "api-key": settings.brevo_api_key,
-        "content-type": "application/json",
+        "Authorization": f"Bearer {settings.sendgrid_api_key}",
+        "Content-Type": "application/json",
     }
+
+    # Construct SendGrid Payload
+    personalizations = {
+        "to": [{"email": to_email}]
+    }
+    if cc_email:
+        personalizations["cc"] = [{"email": cc_email}]
 
     payload = {
-        "sender": {"name": settings.app_name, "email": settings.sender_email},
-        "to": [{"email": to_email}],
+        "personalizations": [personalizations],
+        "from": {"email": settings.sender_email, "name": settings.app_name},
         "subject": subject,
-        "htmlContent": html_content,
+        "content": [{"type": "text/html", "value": html_content}],
     }
-
-    if cc_email:
-        payload["cc"] = [{"email": cc_email}]
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(BREVO_API_URL, json=payload, headers=headers, timeout=10.0)
+            response = await client.post(SENDGRID_API_URL, json=payload, headers=headers, timeout=10.0)
             if response.status_code in (200, 201, 202):
-                logger.info("Email sent successfully via Brevo to %s", to_email)
+                logger.info("Email sent successfully via SendGrid to %s", to_email)
                 return True
             else:
-                logger.error(f"Brevo API Error: {response.status_code} - {response.text}")
+                logger.error(f"SendGrid API Error: {response.status_code} - {response.text}")
                 return False
         except Exception as e:
-            logger.error(f"Failed to connect to Brevo API: {e}")
+            logger.error(f"Failed to connect to SendGrid API: {e}")
             return False
 
 
 async def send_inquiry_email(inquiry: dict) -> bool:
     """
-    Send inquiry details to the sales team via Brevo.
+    Send inquiry details to the sales team via SendGrid.
     """
     try:
         product_name = inquiry.get("product_name") or "General Inquiry"
@@ -69,12 +72,12 @@ async def send_inquiry_email(inquiry: dict) -> bool:
         </html>
         """
 
-        if not settings.brevo_api_key:
-            logger.warning("Brevo API key missing. Logging inquiry instead.")
+        if not settings.sendgrid_api_key:
+            logger.warning("SendGrid API key missing. Logging inquiry instead.")
             logger.info("Inquiry details: %s", inquiry)
             return True
 
-        return await _send_brevo_email(
+        return await _send_sendgrid_email(
             to_email=settings.sales_email,
             subject=subject,
             html_content=html_body,
@@ -88,7 +91,7 @@ async def send_inquiry_email(inquiry: dict) -> bool:
 
 async def send_visit_request_email(visit_request: dict) -> bool:
     """
-    Send visit request details to the sales team via Brevo.
+    Send visit request details to the sales team via SendGrid.
     """
     try:
         subject = "VISIT REQUEST"
@@ -108,12 +111,12 @@ async def send_visit_request_email(visit_request: dict) -> bool:
         </html>
         """
 
-        if not settings.brevo_api_key:
-            logger.warning("Brevo API key missing. Logging visit request instead.")
+        if not settings.sendgrid_api_key:
+            logger.warning("SendGrid API key missing. Logging visit request instead.")
             logger.info("Visit request details: %s", visit_request)
             return True
 
-        return await _send_brevo_email(
+        return await _send_sendgrid_email(
             to_email=settings.sales_email,
             subject=subject,
             html_content=html_body,
