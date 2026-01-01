@@ -41,13 +41,19 @@ async def send_inquiry_email(inquiry: dict) -> bool:
         message.attach(MIMEText(html_body, "html"))
 
         if settings.smtp_username and settings.smtp_password:
+            # Use implicit TLS for port 465, otherwise use STARTTLS
+            use_tls = settings.smtp_port == 465
+            start_tls = not use_tls
+
             await aiosmtplib.send(
                 message,
                 hostname=settings.smtp_host,
                 port=settings.smtp_port,
                 username=settings.smtp_username,
                 password=settings.smtp_password,
-                start_tls=True,
+                use_tls=use_tls,
+                start_tls=start_tls,
+                timeout=10,  # 10s timeout
             )
             logger.info("Inquiry email sent to %s", settings.sales_email)
             return True
@@ -92,13 +98,19 @@ async def send_visit_request_email(visit_request: dict) -> bool:
         message.attach(MIMEText(html_body, "html"))
 
         if settings.smtp_username and settings.smtp_password:
+            # Use implicit TLS for port 465, otherwise use STARTTLS
+            use_tls = settings.smtp_port == 465
+            start_tls = not use_tls
+
             await aiosmtplib.send(
                 message,
                 hostname=settings.smtp_host,
                 port=settings.smtp_port,
                 username=settings.smtp_username,
                 password=settings.smtp_password,
-                start_tls=True,
+                use_tls=use_tls,
+                start_tls=start_tls,
+                timeout=10,  # 10s timeout
             )
             logger.info("Visit request email sent to %s", settings.sales_email)
             return True
