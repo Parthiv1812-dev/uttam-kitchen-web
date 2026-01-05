@@ -1,3 +1,4 @@
 User-agent: *
 Allow: /
-Sitemap: https://uttamkitchen.com/sitemap.xml
+Sitemap: https://www.uttamkitchen.com/sitemap.xml
+
